@@ -1,22 +1,25 @@
-import cv2
 import json
 import click
 import os
 import sys
 import traceback
 from pathlib import Path
-
+import subprocess
+import re
 
 def process_one_file(input, video):
-    videoobj = cv2.VideoCapture(video)
+    output = os.path.splitext(video)[0] + '.gyroflow'
+    if (output == input):
+         return
     video = Path(video).resolve().as_posix()
     with open(input, "r") as f:
         data = json.load(f)
 
+    metadata = subprocess.check_output(f"ffprobe -select_streams v -show_streams \"{video}\" 2>/dev/null", shell=True).decode()
 
-    frame_count = int(videoobj.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = round(videoobj.get(cv2.CAP_PROP_FPS),4)
-    duration = round(frame_count/fps*1000, 1)
+    fps = round(eval(re.findall("avg_frame_rate=(.*)\n", metadata)[0]),4)
+    frame_count = int(re.findall("nb_frames=(.*)\n", metadata)[0])
+    duration = round(float(re.findall("duration=(.*)\n", metadata)[0])*1000)
 
     output_video = "_stabilized".join(os.path.splitext(video))
 
@@ -28,8 +31,6 @@ def process_one_file(input, video):
     data['video_info']['vfr_duration_ms'] = duration
     data["gyro_source"]['filepath'] = video
     data['output']['output_path'] = output_video
-
-    output = os.path.splitext(video)[0] + '.gyroflow'
 
     with open(output, 'w') as f:
         f.write(
